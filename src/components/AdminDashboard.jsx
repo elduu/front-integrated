@@ -19,7 +19,7 @@ const AdminDashboard = ({ darkMode }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('overview',"notifications");
   const [ipToBlock, setIpToBlock] = useState('');
 
   // Mock data initialization
@@ -28,10 +28,14 @@ useEffect(() => {
   fetchStats();
   fetchSecurityConfig();
 
-  if (activeTab === 'notifications') {
-    fetchNotifications(); // Fetch only when tab is notifications
+  // if (activeTab === 'notifications') {
+  //   fetchNotifications(); // Fetch only when tab is notifications
+  //   fetchUnreadCount();
+  // }
+   fetchNotifications(); // Fetch only when tab is notifications
     fetchUnreadCount();
-  }
+    // setNotifications();
+    // setUnreadCount();
 
   const initializeMockData = () => {
     setStats({
@@ -103,7 +107,7 @@ useEffect(() => {
   }, 500);
 
   return () => clearTimeout(timer);
-}, [activeTab]);
+}, []);
 
 const fetchSecurityConfig = async () => {
   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
@@ -345,11 +349,13 @@ const fetchStats = async () => {
   }
 };
 const fetchNotifications = async () => {
+  const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
+  const token = storedUser?.token;
   try {
-    const res = await fetch('/api/notifications?since_id=0&limit=20', {
+    const res = await fetch('http://localhost:8080/api/notifications', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`
+        "Authorization": `Bearer ${token}`
       }
     });
     const data = await res.json();
@@ -360,11 +366,13 @@ const fetchNotifications = async () => {
 };
 
 const fetchUnreadCount = async () => {
+  const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
+  const token = storedUser?.token;
   try {
-    const res = await fetch('/api/notifications/unread', {
+    const res = await fetch('http://localhost:8080/api/notifications/unread', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`
+        "Authorization": `Bearer ${token}`
       }
     });
     const data = await res.json();
@@ -374,14 +382,20 @@ const fetchUnreadCount = async () => {
   }
 };
 
+
 const markNotificationsRead = async () => {
+  const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
+  const token = storedUser?.token;
+
   try {
-    await fetch('/api/notifications/mark-read', {
+    await fetch('http://127.0.0.1:8080/api/notifications/mark-read', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
       }
     });
+
     // Optimistically update UI
     setUnreadCount(0);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -811,8 +825,8 @@ const markNotificationsRead = async () => {
 
     {notifications.length > 0 ? (
       <ul className="notifications-list">
-        {notifications.map((notification, id) => (
-          <li key={index} className={notification.read ? 'read' : 'unread'}>
+        {notifications.map((notification) => (
+  <li key={notification.id || `${notification.type}-${notification.timestamp}`} className={notification.read ? 'read' : 'unread'}>
             <div className="notification-header">
               <span className="notification-type">{notification.type}</span>
               <span className="notification-time">
