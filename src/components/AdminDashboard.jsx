@@ -4,6 +4,7 @@ import {
   FiLock, FiUnlock, FiSettings, FiActivity, FiAlertCircle
 } from 'react-icons/fi';
 import './AdminDashboard.css';
+import axios from 'axios';
 
 const AdminDashboard = ({ darkMode }) => {
   // State for all the API data
@@ -28,14 +29,71 @@ useEffect(() => {
   fetchStats();
   fetchSecurityConfig();
 
-  // if (activeTab === 'notifications') {
-  //   fetchNotifications(); // Fetch only when tab is notifications
-  //   fetchUnreadCount();
-  // }
-   fetchNotifications(); // Fetch only when tab is notifications
+  if (activeTab === 'notifications') {
+    // fetchNotifications(); // Fetch only when tab is notifications
     fetchUnreadCount();
+  }
+  if (activeTab === 'apps') {
+    fetchApps();
+  }
+   fetchNotifications(); // Fetch only when tab is notifications
+    // fetchUnreadCount();
     // setNotifications();
     // setUnreadCount();
+    
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(`http://localhost:8080/manage/apps`, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        setApps(response.data.map(app => ({
+          id: app.app_id,
+          name: app.name, 
+          status: app.status,
+          lastDeployed: app.deployed_at,
+          cpuUsage: app.cpuUsage || '0%',
+          memoryUsage: app.memoryUsage || '0MB'
+        })));
+      } catch (err) {
+        console.error("Fetch error:", err);
+        addStatusMessage("Failed to fetch applications", "error");
+      }
+    };
+    fetchData();
+  
+
+  const fetchApps = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:8080/manage/apps`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      setApps(response.data.map(app => ({
+        id: app.app_id,
+        name: app.name, 
+        status: app.status,
+        lastDeployed: app.deployed_at,
+        cpuUsage: app.cpuUsage || '0%',
+        memoryUsage: app.memoryUsage || '0MB'
+      })));
+      addStatusMessage('Applications refreshed successfully', 'success');
+    } catch (error) {
+      addStatusMessage('Error fetching applications', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const addStatusMessage = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setStatusMessages(prev => [
+      { id: Date.now(), message: `${timestamp} - ${message}`, type },
+      ...prev.slice(0, 19)
+    ]);
+  };
 
   const initializeMockData = () => {
     setStats({
@@ -60,24 +118,24 @@ useEffect(() => {
       }
     });
 
-    setApps({
-      'app-123': {
-        path: '/var/www/app1',
-        last_accessed: Date.now() / 1000 - 3600,
-        resource_usage: {
-          cpu: 15.2,
-          memory: 32.5
-        }
-      },
-      'app-456': {
-        path: '/var/www/app2',
-        last_accessed: Date.now() / 1000 - 7200,
-        resource_usage: {
-          cpu: 8.7,
-          memory: 24.1
-        }
-      }
-    });
+    // setApps({
+    //   'app-123': {
+    //     path: '/var/www/app1',
+    //     last_accessed: Date.now() / 1000 - 3600,
+    //     resource_usage: {
+    //       cpu: 15.2,
+    //       memory: 32.5
+    //     }
+    //   },
+    //   'app-456': {
+    //     path: '/var/www/app2',
+    //     last_accessed: Date.now() / 1000 - 7200,
+    //     resource_usage: {
+    //       cpu: 8.7,
+    //       memory: 24.1
+    //     }
+    //   }
+    // });
 
     setSecurityConfig({
       malicious_threshold: 10,
@@ -140,13 +198,13 @@ const fetchSecurityConfig = async () => {
   //   }, 800);
   // };
 
-  const deleteApp = async (appId) => {
-    setApps(prev => {
-      const newApps = {...prev};
-      delete newApps[appId];
-      return newApps;
-    });
-  };
+  // const deleteApp = async (appId) => {
+  //   setApps(prev => {
+  //     const newApps = {...prev};
+  //     delete newApps[appId];
+  //     return newApps;
+  //   });
+  // };
 
 
 const blockIP = async () => {
@@ -403,6 +461,53 @@ const markNotificationsRead = async () => {
     console.error("Error marking notifications as read:", error);
   }
 };
+ const deleteApp = async (appId) => {
+    try {
+      await axios.delete(`http://localhost:8080/admin/apps/${appId}`, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      addStatusMessage(`Deleted app ${appId}`, "success");
+      // Refresh app list after deletion
+      fetchApps();
+    } catch (error) {
+      addStatusMessage(`Error deleting app ${appId}`, "error");
+      console.error("Error deleting app:", error);
+    }
+  };
+
+// const deleteApp = async (appId) => {
+//   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
+//   const token = storedUser?.token;
+
+//   try {
+//     const res = await fetch(`http://localhost:8080/admin/apps/${appId}`, {
+//       method: "DELETE",
+//       headers: {
+//         Authorization: `Bearer ${token}`,
+//         "Content-Type": "application/json",
+//       },
+//     });
+
+//     if (!res.ok) {
+//       const text = await res.text();
+//       throw new Error(`Failed to delete app: ${text}`);
+//     }
+
+//     // Update UI
+//     setApps((prev) => {
+//       const updated = { ...prev };
+//       delete updated[appId];
+//       return updated;
+//     });
+
+//     console.log(`App ${appId} deleted successfully`);
+//   } catch (error) {
+//     console.error("Error deleting app:", error);
+//   }
+// };
+
 
 
   // Helper to format last accessed time
@@ -529,48 +634,56 @@ const markNotificationsRead = async () => {
           </div>
         )}
 
-        {activeTab === 'apps' && (
-          <div className="apps-section">
-            <h2>Managed Applications ({Object.keys(apps).length})</h2>
-            <div className="apps-list">
-              {Object.keys(apps).length > 0 ? (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Path</th>
-                      <th>Last Accessed</th>
-                      <th>CPU Usage</th>
-                      <th>Memory Usage</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(apps).map(([appId, appData]) => (
-                      <tr key={appId}>
-                        <td>{appId}</td>
-                        <td>{appData.path}</td>
-                        <td>{formatLastAccessed(appData.last_accessed)}</td>
-                        <td>{appData.resource_usage?.cpu || 0}%</td>
-                        <td>{appData.resource_usage?.memory || 0}%</td>
-                        <td>
-                          <button 
-                            onClick={() => deleteApp(appId)}
-                            className="delete-button"
-                          >
-                            <FiTrash2 /> Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p>No applications currently running</p>
-              )}
-            </div>
-          </div>
-        )}
+       
+      {/* Your tab controls here */}
+      {activeTab === "apps" && (
+        <div className="apps-section">
+          <h2>Managed Applications ({apps.length})</h2>
+          {loading ? (
+            <p>Loading apps...</p>
+          ) : apps.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Last Deployed</th>
+                  <th>CPU Usage</th>
+                  <th>Memory Usage</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {apps.map(({ id, name, status, lastDeployed, cpuUsage, memoryUsage }) => (
+                  <tr key={id}>
+                    <td>{id}</td>
+                    <td>{name}</td>
+                    <td>{status}</td>
+                    <td>{new Date(lastDeployed).toLocaleString()}</td>
+                    <td>{cpuUsage}</td>
+                    <td>{memoryUsage}</td>
+                    <td>
+                      <button
+                        onClick={() => deleteApp(id)}
+                        className="delete-button"
+                        title={`Delete app ${id}`}
+                      >
+                        <FiTrash2 /> Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p>No applications currently running</p>
+          )}
+        </div>
+      )}
+
+    
+ 
 {activeTab === 'security' && (
   <div className="security-section" style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
     
@@ -631,7 +744,7 @@ const markNotificationsRead = async () => {
           />
         </div>
 
-        <div className="form-group">
+        {/* <div className="form-group">
           <label>Admin Email</label>
           <input
             type="email"
@@ -641,7 +754,7 @@ const markNotificationsRead = async () => {
               admin_email: e.target.value
             })}
           />
-        </div>
+        </div> */}
 
         <div className="form-group">
           <label>Alert Cooldown (s)</label>
