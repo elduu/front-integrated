@@ -23,102 +23,88 @@ const AdminDashboard = ({ darkMode }) => {
   const [ipToBlock, setIpToBlock] = useState('');
 
   // Mock data initialization
-  useEffect(() => {
+useEffect(() => {
+  fetchBlockedIPs();
+  fetchStats();
+  fetchSecurityConfig();
 
-    
-    fetchBlockedIPs();
-    fetchStats();
-    fetchSecurityConfig();
-  
-    const initializeMockData = () => {
-      setStats({
-        system: {
-          cpu: 35.4,
-          memory: 62.8,
-          uptime: 1234567,
-          requests_processed: 4231
-        },
-        security: {
-          total_blocked: 12,
-          rate_limited: 5,
-          recent_blocks: {
-            '192.168.1.1': 15,
-            '10.0.0.5': 8,
-            '172.16.0.3': 6
-          }
-        },
-        deployments: {
-          count: 4,
-          active: 3
-        }
-      });
+  if (activeTab === 'notifications') {
+    fetchNotifications(); // Fetch only when tab is notifications
+    fetchUnreadCount();
+  }
 
-      setApps({
-        'app-123': {
-          path: '/var/www/app1',
-          last_accessed: Date.now()/1000 - 3600,
-          resource_usage: {
-            cpu: 15.2,
-            memory: 32.5
-          }
-        },
-        'app-456': {
-          path: '/var/www/app2',
-          last_accessed: Date.now()/1000 - 7200,
-          resource_usage: {
-            cpu: 8.7,
-            memory: 24.1
-          }
-        }
-      });
-
-
-
-      setSecurityConfig({
-        malicious_threshold: 10,
-        blocking_enabled: true,
-        rate_limit_window: 60,
-        max_requests_per_window: 100,
-        admin_email: 'admin@example.com',
-        alert_methods: ['email', 'dashboard'],
-        alert_cooldown: 300
-      });
-
-      setSecurityStats({
+  const initializeMockData = () => {
+    setStats({
+      system: {
+        cpu: 35.4,
+        memory: 62.8,
+        uptime: 1234567,
+        requests_processed: 4231
+      },
+      security: {
         total_blocked: 12,
         rate_limited: 5,
-        recent_attacks: 23
-      });
-
-      setNotifications([
-        {
-          id: 1,
-          type: 'security',
-          message: 'Multiple failed login attempts from 192.168.1.1',
-          timestamp: Date.now() - 3600000,
-          read: false
-        },
-        {
-          id: 2,
-          type: 'system',
-          message: 'Server CPU usage above threshold',
-          timestamp: Date.now() - 7200000,
-          read: true
+        recent_blocks: {
+          '192.168.1.1': 15,
+          '10.0.0.5': 8,
+          '172.16.0.3': 6
         }
-      ]);
+      },
+      deployments: {
+        count: 4,
+        active: 3
+      }
+    });
 
-      setUnreadCount(1);
-      
-      setLoading(false);
-    };
+    setApps({
+      'app-123': {
+        path: '/var/www/app1',
+        last_accessed: Date.now() / 1000 - 3600,
+        resource_usage: {
+          cpu: 15.2,
+          memory: 32.5
+        }
+      },
+      'app-456': {
+        path: '/var/www/app2',
+        last_accessed: Date.now() / 1000 - 7200,
+        resource_usage: {
+          cpu: 8.7,
+          memory: 24.1
+        }
+      }
+    });
 
-    // Simulate API fetch delay
-    const timer = setTimeout(() => {
-      initializeMockData();
-    }, 500);
+    setSecurityConfig({
+      malicious_threshold: 10,
+      blocking_enabled: true,
+      rate_limit_window: 60,
+      max_requests_per_window: 100,
+      admin_email: 'admin@example.com',
+      alert_methods: ['email', 'dashboard'],
+      alert_cooldown: 300
+    });
 
-    return () => clearTimeout(timer);
-  }, []);
+    setSecurityStats({
+      total_blocked: 12,
+      rate_limited: 5,
+      recent_attacks: 23
+    });
+
+    // Don't overwrite actual notification fetch with mock data:
+    // setNotifications([...])
+    // setUnreadCount(1)
+
+    setLoading(false);
+  };
+
+  const timer = setTimeout(() => {
+    initializeMockData();
+  }, 500);
+
+  return () => clearTimeout(timer);
+}, [activeTab]);
+
 const fetchSecurityConfig = async () => {
   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
   const token = storedUser?.token;
@@ -294,12 +280,7 @@ const handleReload = async () => {
   }
 };
 
-  const markNotificationsRead = async () => {
-    setUnreadCount(0);
-    setNotifications(prev => 
-      prev.map(n => ({...n, read: true}))
-    );
-  };
+  
   const updateSecurityConfig = async (config) => {
   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
   const token = storedUser?.token;
@@ -363,6 +344,53 @@ const fetchStats = async () => {
     console.error("Network error fetching stats:", err);
   }
 };
+const fetchNotifications = async () => {
+  try {
+    const res = await fetch('/api/notifications?since_id=0&limit=20', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    setNotifications(data.notifications || []);
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+  }
+};
+
+const fetchUnreadCount = async () => {
+  try {
+    const res = await fetch('/api/notifications/unread', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    setUnreadCount(data.unread_count || 0);
+  } catch (error) {
+    console.error("Error fetching unread count:", error);
+  }
+};
+
+const markNotificationsRead = async () => {
+  try {
+    await fetch('/api/notifications/mark-read', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    // Optimistically update UI
+    setUnreadCount(0);
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  } catch (error) {
+    console.error("Error marking notifications as read:", error);
+  }
+};
+
+
   // Helper to format last accessed time
   const formatLastAccessed = (timestamp) => {
     if (!timestamp) return 'Never';
@@ -774,33 +802,33 @@ const fetchStats = async () => {
             </div>
           </div>
         )} */}
+{activeTab === 'notifications' && (
+  <div className="notifications-section">
+    <h2>System Notifications</h2>
+    <button onClick={markNotificationsRead} className="mark-read-button">
+      Mark All as Read
+    </button>
 
-        {activeTab === 'notifications' && (
-          <div className="notifications-section">
-            <h2>System Notifications</h2>
-            <button onClick={markNotificationsRead} className="mark-read-button">
-              Mark All as Read
-            </button>
-            
-            {notifications.length > 0 ? (
-              <ul className="notifications-list">
-                {notifications.map((notification, index) => (
-                  <li key={index} className={notification.read ? 'read' : 'unread'}>
-                    <div className="notification-header">
-                      <span className="notification-type">{notification.type}</span>
-                      <span className="notification-time">
-                        {new Date(notification.timestamp).toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="notification-message">{notification.message}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>No notifications available</p>
-            )}
-          </div>
-        )}
+    {notifications.length > 0 ? (
+      <ul className="notifications-list">
+        {notifications.map((notification, id) => (
+          <li key={index} className={notification.read ? 'read' : 'unread'}>
+            <div className="notification-header">
+              <span className="notification-type">{notification.type}</span>
+              <span className="notification-time">
+                {new Date(notification.timestamp).toLocaleString()}
+              </span>
+            </div>
+            <p className="notification-message">{notification.data}</p>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p>No notifications available</p>
+    )}
+  </div>
+)}
+      
       </div>
     </div>
   );
