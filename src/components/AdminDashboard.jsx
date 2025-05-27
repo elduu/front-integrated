@@ -5,6 +5,12 @@ import {
 } from 'react-icons/fi';
 import './AdminDashboard.css';
 import axios from 'axios';
+import { Bar, Doughnut } from 'react-chartjs-2';
+import {
+  Chart as ChartJS, BarElement, CategoryScale, LinearScale, ArcElement, Tooltip, Legend,
+} from 'chart.js';
+ChartJS.register(BarElement, CategoryScale, LinearScale, ArcElement, Tooltip, Legend);
+import NotificationsSection from "./NotificationsSection"; 
 
 const AdminDashboard = ({ darkMode }) => {
   // State for all the API data
@@ -406,9 +412,26 @@ const fetchStats = async () => {
     console.error("Network error fetching stats:", err);
   }
 };
+// const fetchNotifications = async () => {
+//   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
+//   const token = storedUser?.token;
+//   try {
+//     const res = await fetch('http://localhost:8080/api/notifications', {
+//       method: 'GET',
+//       headers: {
+//         "Authorization": `Bearer ${token}`
+//       }
+//     });
+//     const data = await res.json();
+//     setNotifications(data.notifications || []);
+//   } catch (error) {
+//     console.error("Error fetching notifications:", error);
+//   }
+// };
 const fetchNotifications = async () => {
   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
   const token = storedUser?.token;
+
   try {
     const res = await fetch('http://localhost:8080/api/notifications', {
       method: 'GET',
@@ -416,8 +439,24 @@ const fetchNotifications = async () => {
         "Authorization": `Bearer ${token}`
       }
     });
-    const data = await res.json();
-    setNotifications(data.notifications || []);
+
+    const result = await res.json();
+
+    const parsed = (result.notifications || []).map((n) => ({
+      id: n.id,
+      type: n.type,
+      read: n.read,
+      time: new Date(n.timestamp * 1000).toLocaleString(),
+      ip: n.data.ip,
+      method: n.data.method,
+      path: n.data.path,
+      findings: n.data.findings,
+      attackType: n.data.attack_type,
+      violationCount: n.data.violation_count,
+      requestCount: n.data.request_count,
+    }));
+
+    setNotifications(parsed);
   } catch (error) {
     console.error("Error fetching notifications:", error);
   }
@@ -461,6 +500,7 @@ const markNotificationsRead = async () => {
     console.error("Error marking notifications as read:", error);
   }
 };
+
  const deleteApp = async (appId) => {
     try {
       await axios.delete(`http://localhost:8080/admin/apps/${appId}`, {
@@ -477,37 +517,30 @@ const markNotificationsRead = async () => {
     }
   };
 
-// const deleteApp = async (appId) => {
-//   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
-//   const token = storedUser?.token;
 
-//   try {
-//     const res = await fetch(`http://localhost:8080/admin/apps/${appId}`, {
-//       method: "DELETE",
-//       headers: {
-//         Authorization: `Bearer ${token}`,
-//         "Content-Type": "application/json",
-//       },
-//     });
+// CPU & Memory Chart Data
+const resourceData = {
+  labels: ['CPU', 'Memory'],
+  datasets: [
+    {
+      label: 'Usage (%)',
+      data: [stats?.system?.cpu || 0, stats?.system?.memory || 0],
+      backgroundColor: ['#FF6384', '#36A2EB'],
+      borderRadius: 5,
+    },
+  ],
+};
 
-//     if (!res.ok) {
-//       const text = await res.text();
-//       throw new Error(`Failed to delete app: ${text}`);
-//     }
-
-//     // Update UI
-//     setApps((prev) => {
-//       const updated = { ...prev };
-//       delete updated[appId];
-//       return updated;
-//     });
-
-//     console.log(`App ${appId} deleted successfully`);
-//   } catch (error) {
-//     console.error("Error deleting app:", error);
-//   }
-// };
-
+const securityPieData = {
+  labels: ['Blocked IPs', 'Rate Limited'],
+  datasets: [
+    {
+      data: [stats?.security?.total_blocked || 0, stats?.security?.rate_limited || 0],
+      backgroundColor: ['#FF9F40', '#FFCD56'],
+      hoverOffset: 4,
+    },
+  ],
+};
 
 
   // Helper to format last accessed time
@@ -537,428 +570,269 @@ const markNotificationsRead = async () => {
     );
   }
 
+  
   return (
     <div className={`admin-dashboard ${darkMode ? 'dark' : 'light'}`}>
-      <div className="admin-header">
-        <h1><FiServer /> PyServe Admin Dashboard</h1>
-        <button onClick={handleReload} className="reload-button">
-          <FiRefreshCw /> Reload All
-        </button>
-      </div>
+    <div className="admin-header flex justify-between items-center px-6 py-4 bg-gray-800 text-white rounded-t">
+      <h1 className="text-2xl font-bold"><FiServer className="inline" /> PyServe Admin Dashboard</h1>
+      <button onClick={handleReload} className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded">
+        <FiRefreshCw className="inline mr-1" /> Reload All
+      </button>
+    </div>
 
-      {unreadCount > 0 && (
-        <div className="notifications-banner" onClick={markNotificationsRead}>
-          <FiBell /> {unreadCount} unread notifications
+    {unreadCount > 0 && (
+      <div onClick={markNotificationsRead} className="bg-yellow-100 text-yellow-800 p-3 cursor-pointer">
+        <FiBell className="inline mr-1" /> {unreadCount} unread notifications
+      </div>
+    )}
+
+    <div className="admin-tabs flex border-b bg-gray-100">
+  {[
+    { key: 'overview', icon: <FiActivity /> },
+    { key: 'apps', icon: <FiServer /> },
+    { key: 'security', icon: <FiShield /> },
+    { key: 'ip-management', icon: <FiLock /> },
+    { key: 'notifications', icon: <FiBell /> }
+  ].map(({ key, icon }) => (
+    <button
+      key={key}
+      className={`py-2 px-4 ${activeTab === key ? 'bg-white border-t-2 border-blue-500 font-semibold' : 'text-gray-500'}`}
+      onClick={() => setActiveTab(key)}
+    >
+      {icon} {' '}{key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+    </button>
+  ))}
+
+
+    </div>
+{activeTab === 'overview' && (
+  <div className="p-6 space-y-6">
+
+    {/* Top Quick Stats Cards */}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded shadow p-4 text-center">
+        <h4 className="text-sm text-gray-500 dark:text-gray-300 mb-1">CPU Usage</h4>
+        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats?.system?.cpu || 0}%</p>
+      </div>
+      <div className="bg-white dark:bg-gray-800 rounded shadow p-4 text-center">
+        <h4 className="text-sm text-gray-500 dark:text-gray-300 mb-1">Memory Usage</h4>
+        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats?.system?.memory || 0}%</p>
+      </div>
+      <div className="bg-white dark:bg-gray-800 rounded shadow p-4 text-center">
+        <h4 className="text-sm text-gray-500 dark:text-gray-300 mb-1">Blocked IPs</h4>
+        <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats?.security?.total_blocked || 0}</p>
+      </div>
+      <div className="bg-white dark:bg-gray-800 rounded shadow p-4 text-center">
+        <h4 className="text-sm text-gray-500 dark:text-gray-300 mb-1">Rate Limited</h4>
+        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats?.security?.rate_limited || 0}</p>
+      </div>
+    </div>
+
+    {/* Chart Section */}
+    <div className="grid md:grid-cols-2 gap-6">
+      {/* Bar Chart Section */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-md flex flex-col justify-between">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">System Usage</h3>
+        <div className="h-64">
+          <Bar data={resourceData} />
         </div>
-      )}
-
-      <div className="admin-tabs">
-        <button 
-          className={activeTab === 'overview' ? 'active' : ''}
-          onClick={() => setActiveTab('overview')}
-        >
-          <FiActivity /> Overview
-        </button>
-        <button 
-          className={activeTab === 'apps' ? 'active' : ''}
-          onClick={() => setActiveTab('apps')}
-        >
-          <FiServer /> Applications
-        </button>
-        <button 
-          className={activeTab === 'security' ? 'active' : ''}
-          onClick={() => setActiveTab('security')}
-        >
-          <FiShield /> Security
-        </button>
-        <button 
-          className={activeTab === 'notifications' ? 'active' : ''}
-          onClick={() => setActiveTab('notifications')}
-        >
-          <FiBell /> Notifications
-        </button>
+        <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-700 dark:text-gray-300">
+          <div><strong>Uptime:</strong> {formatUptime(stats?.system?.uptime)}</div>
+          <div><strong>Requests:</strong> {stats?.system?.requests_processed}</div>
+        </div>
       </div>
 
-      <div className="admin-content">
-        {activeTab === 'overview' && (
-          <div className="overview-section">
-            <div className="stats-grid">
-              <div className="stat-card">
-                <h3>System CPU</h3>
-                <p>{stats?.system?.cpu || 0}%</p>
-              </div>
-              <div className="stat-card">
-                <h3>Memory Usage</h3>
-                <p>{stats?.system?.memory || 0}%</p>
-              </div>
-              <div className="stat-card">
-                <h3>Server Uptime</h3>
-                <p>{formatUptime(stats?.system?.uptime)}</p>
-              </div>
-              <div className="stat-card">
-                <h3>Total Requests</h3>
-                <p>{stats?.system?.requests_processed || 0}</p>
-              </div>
-            </div>
-<div className="stats-grid">
-  <div className="stat-card">
-    <h3>Total Blocked Attempts</h3>
-    <p>{stats?.security?.total_blocked || 0}</p>
+      {/* Doughnut Chart Section */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-md flex flex-col items-center">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Security Overview</h3>
+        <div className="w-40 h-40">
+          <Doughnut data={securityPieData} />
+        </div>
+        <div className="mt-4 text-sm text-gray-700 dark:text-gray-300 space-y-2 w-full text-center">
+          <p><strong>Firewall:</strong> {securityConfig?.blocking_enabled ? '🟢 Enabled' : '🔴 Disabled'}</p>
+          <p><strong>Deployments:</strong> {stats?.deployments?.count || 0} (Active: {stats?.deployments?.active})</p>
+        </div>
+      </div>
+    </div>
   </div>
-  <div className="stat-card">
-    <h3>Rate Limited IPs</h3>
-    <p>{stats?.security?.rate_limited || 0}</p>
-  </div>
-  <div className="stat-card">
-    <h3>Deployments</h3>
-    <p>{stats?.deployments?.count || 0} (Active: {stats?.deployments?.active || 0})</p>
-  </div>
-</div>
-            <div className="security-overview">
-              <h2><FiShield /> Security Overview</h2>
-              <div className="security-stats">
-                <div>
-                  <h3>Blocked IPs</h3>
-                  <p>{stats?.security?.total_blocked || 0}</p>
-                </div>
-                <div>
-                  <h3>Rate Limited</h3>
-                  <p>{stats?.security?.rate_limited || 0}</p>
-                </div>
-                <div>
-                  <h3>Firewall Status</h3>
-                  <p>{securityConfig?.blocking_enabled ? 'Enabled' : 'Disabled'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+)}
+
 
        
       {/* Your tab controls here */}
-      {activeTab === "apps" && (
-        <div className="apps-section">
-          <h2>Managed Applications ({apps.length})</h2>
-          {loading ? (
-            <p>Loading apps...</p>
-          ) : apps.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Last Deployed</th>
-                  <th>CPU Usage</th>
-                  <th>Memory Usage</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {apps.map(({ id, name, status, lastDeployed, cpuUsage, memoryUsage }) => (
-                  <tr key={id}>
-                    <td>{id}</td>
-                    <td>{name}</td>
-                    <td>{status}</td>
-                    <td>{new Date(lastDeployed).toLocaleString()}</td>
-                    <td>{cpuUsage}</td>
-                    <td>{memoryUsage}</td>
-                    <td>
-                      <button
-                        onClick={() => deleteApp(id)}
-                        className="delete-button"
-                        title={`Delete app ${id}`}
-                      >
-                        <FiTrash2 /> Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p>No applications currently running</p>
-          )}
-        </div>
-      )}
+ {activeTab === "apps" && (
+  <div className="apps-section p-6 bg-gray-900 rounded-xl shadow-lg">
+    <h1>
+      Managed Applications <span className="text-orange-400">({apps.length})</span>
+    </h1>
+
+    {loading ? (
+      <p className="text-gray-400">Loading apps...</p>
+    ) : apps.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left text-gray-300 border border-gray-700 rounded-lg overflow-hidden">
+          <thead className="bg-gray-800 text-gray-200 uppercase text-xs">
+            <tr>
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Last Deployed</th>
+              <th className="px-4 py-3">CPU Usage</th>
+              <th className="px-4 py-3">Memory Usage</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-700">
+            {apps.map(({ id, status, lastDeployed, cpuUsage, memoryUsage }) => (
+              <tr
+                key={id}
+                className="hover:bg-gray-800 transition-all duration-200"
+              >
+                <td className="px-4 py-3">{id}</td>
+              
+                <td className="px-4 py-3">
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-semibold ${
+                      status === "running"
+                        ? "bg-green-600 text-white"
+                        : status === "stopped"
+                        ? "bg-red-600 text-white"
+                        : "bg-yellow-600 text-white"
+                    }`}
+                  >
+                    {status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {new Date(lastDeployed).toLocaleString()}
+                </td>
+                <td className="px-4 py-3">{cpuUsage}</td>
+                <td className="px-4 py-3">{memoryUsage}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="text-gray-400">No applications currently running.</p>
+    )}
+  </div>
+)}
+
 
     
  
 {activeTab === 'security' && (
-  <div className="security-section" style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
-    
-    {/* Left Panel: Security Config */}
-    <div className="security-config" style={{ flex: 1 }}>
-      <h2>Security Configuration</h2>
-      <form onSubmit={(e) => {
+  <div className="apps-section p-6 bg-gray-900 rounded-xl shadow text-white">
+    <h2 className="text-xl font-semibold mb-4"><FiShield className="inline mr-2" /> Security Configuration</h2>
+    <form
+      onSubmit={(e) => {
         e.preventDefault();
         updateSecurityConfig(securityConfig);
-      }}>
-        <div className="form-group">
-          <label>
+      }}
+      className="grid grid-cols-1 md:grid-cols-2 gap-6"
+    >
+      {[
+        { label: 'Blocking Enabled', type: 'checkbox', field: 'blocking_enabled' },
+        { label: 'Malicious Threshold', type: 'number', field: 'malicious_threshold' },
+        { label: 'Rate Limit Window (s)', type: 'number', field: 'rate_limit_window' },
+        { label: 'Max Requests Per Window', type: 'number', field: 'max_requests_per_window' },
+        { label: 'Alert Cooldown (s)', type: 'number', field: 'alert_cooldown' },
+        { label: 'Alert Methods (comma-separated)', type: 'text', field: 'alert_methods' }
+      ].map(({ label, type, field }) => (
+        <div key={field}>
+          <label className="block mb-1">{label}</label>
+          {type === 'checkbox' ? (
             <input
               type="checkbox"
-              checked={securityConfig.blocking_enabled || false}
-              onChange={(e) => setSecurityConfig({
-                ...securityConfig,
-                blocking_enabled: e.target.checked
-              })}
+              checked={securityConfig[field] || false}
+              onChange={(e) => setSecurityConfig({ ...securityConfig, [field]: e.target.checked })}
+              className="form-checkbox h-5 w-5 text-blue-600"
             />
-            Blocking Enabled
-          </label>
+          ) : (
+            <input
+              type={type}
+              value={
+                field === 'alert_methods'
+                  ? (securityConfig.alert_methods || []).join(', ')
+                  : securityConfig[field] || ''
+              }
+              onChange={(e) =>
+                setSecurityConfig({
+                  ...securityConfig,
+                  [field]:
+                    field === 'alert_methods'
+                      ? e.target.value.split(',').map(v => v.trim())
+                      : parseInt(e.target.value)
+                })
+              }
+              className="w-full p-2 rounded bg-gray-800 border border-gray-700"
+            />
+          )}
         </div>
-
-        <div className="form-group">
-          <label>Malicious Threshold</label>
-          <input
-            type="number"
-            value={securityConfig.malicious_threshold || 0}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              malicious_threshold: parseInt(e.target.value)
-            })}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Rate Limit Window (s)</label>
-          <input
-            type="number"
-            value={securityConfig.rate_limit_window || 0}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              rate_limit_window: parseInt(e.target.value)
-            })}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Max Requests Per Window</label>
-          <input
-            type="number"
-            value={securityConfig.max_requests_per_window || 0}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              max_requests_per_window: parseInt(e.target.value)
-            })}
-          />
-        </div>
-
-        {/* <div className="form-group">
-          <label>Admin Email</label>
-          <input
-            type="email"
-            value={securityConfig.admin_email || ""}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              admin_email: e.target.value
-            })}
-          />
-        </div> */}
-
-        <div className="form-group">
-          <label>Alert Cooldown (s)</label>
-          <input
-            type="number"
-            value={securityConfig.alert_cooldown || 0}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              alert_cooldown: parseInt(e.target.value)
-            })}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Alert Methods (comma-separated)</label>
-          <input
-            type="text"
-            value={securityConfig.alert_methods?.join(", ") || ""}
-            onChange={(e) => setSecurityConfig({
-              ...securityConfig,
-              alert_methods: e.target.value.split(",").map(v => v.trim())
-            })}
-          />
-        </div>
-
-        <button type="submit" className="update-button">Update Configuration</button>
-      </form>
-    </div>
-
-    {/* Right Panel: IP Management */}
-    <div className="ip-management" style={{ flex: 1 }}>
-      <h2>IP Address Management</h2>
-
-      <div className="block-ip-form">
-        <input
-          type="text"
-          value={ipToBlock}
-          onChange={(e) => setIpToBlock(e.target.value)}
-          placeholder="Enter IP address to block"
-        />
-        <button onClick={blockIP}>
-          <FiLock /> Block IP
+      ))}
+      <div className="col-span-full">
+        <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded">
+          Update Configuration
         </button>
       </div>
-
-      <h3>Blocked IP Addresses ({Object.keys(blockedIPs).length})</h3>
-      {Object.keys(blockedIPs).length > 0 ? (
-        <ul className="blocked-ips-list">
-          {Object.entries(blockedIPs).map(([ip, data]) => (
-            <li key={ip}>
-              <div className="ip-info">
-                <span className="ip-address">{ip}</span>
-                <span className="ip-stats">Attempts: {data.count}</span>
-              </div>
-              <button
-                onClick={() => unblockIP(ip)}
-                className="unblock-button"
-              >
-                <FiUnlock /> Unblock
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No IP addresses currently blocked</p>
-      )}
-    </div>
-
+    </form>
   </div>
 )}
 
-        {/* {activeTab === 'security' && (
-          <div className="security-section">
-            <div className="security-config">
-              <h2>Security Configuration</h2>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                updateSecurityConfig(securityConfig);
-              }}>
-                <div className="form-group">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={securityConfig.blocking_enabled || false}
-                      onChange={(e) => setSecurityConfig({
-                        ...securityConfig,
-                        blocking_enabled: e.target.checked
-                      })}
-                    />
-                    Enable IP Blocking
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label>
-                    Malicious Threshold:
-                    <input
-                      type="number"
-                      value={securityConfig.malicious_threshold || 10}
-                      onChange={(e) => setSecurityConfig({
-                        ...securityConfig,
-                        malicious_threshold: parseInt(e.target.value)
-                      })}
-                    />
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label>
-                    Rate Limit Window (sec):
-                    <input
-                      type="number"
-                      value={securityConfig.rate_limit_window || 60}
-                      onChange={(e) => setSecurityConfig({
-                        ...securityConfig,
-                        rate_limit_window: parseInt(e.target.value)
-                      })}
-                    />
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label>
-                    Max Requests:
-                    <input
-                      type="number"
-                      value={securityConfig.max_requests_per_window || 100}
-                      onChange={(e) => setSecurityConfig({
-                        ...securityConfig,
-                        max_requests_per_window: parseInt(e.target.value)
-                      })}
-                    />
-                  </label>
-                </div>
-                <button type="submit">Save Configuration</button>
-              </form>
-            </div>
 
-            <div className="ip-management">
-              <h2>IP Address Management</h2>
-              <div className="block-ip-form">
-                <input
-                  type="text"
-                  value={ipToBlock}
-                  onChange={(e) => setIpToBlock(e.target.value)}
-                  placeholder="Enter IP address to block"
-                />
-                <button onClick={blockIP}>
-                  <FiLock /> Block IP
-                </button>
-              </div>
+   {activeTab === 'ip-management' && (
+  <div className="apps-section p-6 bg-gray-900 rounded-xl shadow text-white">
+    <h2 className="text-xl font-semibold mb-4"><FiLock className="inline mr-2" /> IP Address Management</h2>
 
-              <h3>Blocked IP Addresses ({Object.keys(blockedIPs).length})</h3>
-              {Object.keys(blockedIPs).length > 0 ? (
-                <ul className="blocked-ips-list">
-                  
-                  {Object.entries(blockedIPs).map(([ip, data]) => (
-                    <li key={ip}>
-                      <div className="ip-info">
-                        <span className="ip-address">{ip}</span>
-                        <span className="ip-stats">Attempts: {data.count}</span>
-                      </div>
-                      <button 
-                        onClick={() => unblockIP(ip)} 
-                        className="unblock-button"
-                      >
-                        <FiUnlock /> Unblock
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No IP addresses currently blocked</p>
-              )}
-            </div>
-          </div>
-        )} */}
-{activeTab === 'notifications' && (
-  <div className="notifications-section">
-    <h2>System Notifications</h2>
-    <button onClick={markNotificationsRead} className="mark-read-button">
-      Mark All as Read
-    </button>
+    <div className="flex gap-4 mb-6">
+      <input
+        type="text"
+        value={ipToBlock}
+        onChange={(e) => setIpToBlock(e.target.value)}
+        placeholder="Enter IP address to block"
+        className="flex-1 p-2 rounded bg-gray-800 border border-gray-700"
+      />
+      <button onClick={blockIP} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white">
+        <FiLock className="inline mr-1" /> Block IP
+      </button>
+    </div>
 
-    {notifications.length > 0 ? (
-      <ul className="notifications-list">
-        {notifications.map((notification) => (
-  <li key={notification.id || `${notification.type}-${notification.timestamp}`} className={notification.read ? 'read' : 'unread'}>
-            <div className="notification-header">
-              <span className="notification-type">{notification.type}</span>
-              <span className="notification-time">
-                {new Date(notification.timestamp).toLocaleString()}
-              </span>
+    <h3 className="text-lg mb-3">Blocked IP Addresses ({Object.keys(blockedIPs).length})</h3>
+    {Object.keys(blockedIPs).length > 0 ? (
+      <ul className="space-y-4">
+        {Object.entries(blockedIPs).map(([ip, data]) => (
+          <li key={ip} className="bg-gray-800 p-3 rounded flex justify-between items-center">
+            <div>
+              <p className="text-sm"><strong>IP:</strong> {ip}</p>
+              <p className="text-sm text-gray-400">Attempts: {data.count}</p>
             </div>
-            <p className="notification-message">{notification.data}</p>
+            <button
+              onClick={() => unblockIP(ip)}
+              className="text-red-400 hover:text-red-600"
+            >
+              <FiUnlock className="inline mr-1" /> Unblock
+            </button>
           </li>
         ))}
       </ul>
     ) : (
-      <p>No notifications available</p>
+      <p className="text-gray-400">No IP addresses currently blocked.</p>
     )}
   </div>
 )}
+
+     
+  {activeTab === 'notifications' && (
+        <NotificationsSection
+          notifications={notifications}
+          markNotificationsRead={markNotificationsRead}
+          blockIP={blockIP}
+        />
+      )}
       
       </div>
-    </div>
+ 
   );
+  
 };
 
 export default AdminDashboard;
