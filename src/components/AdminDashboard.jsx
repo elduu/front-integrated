@@ -11,6 +11,10 @@ import {
 } from 'chart.js';
 ChartJS.register(BarElement, CategoryScale, LinearScale, ArcElement, Tooltip, Legend);
 import NotificationsSection from "./NotificationsSection"; 
+const BASE_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:8080'
+  : window.location.origin;
+const basUrl = 'http://localhost:8080/';
 
 const AdminDashboard = ({ darkMode }) => {
   // State for all the API data
@@ -49,7 +53,7 @@ useEffect(() => {
     
     const fetchData = async () => {
       try {
-        const response = await axios.get(`http://localhost:8080/manage/apps`, {
+        const response = await axios.get(`${basUrl}manage/apps`, {
           headers: {
             'Content-Type': 'application/json'
           }
@@ -73,7 +77,7 @@ useEffect(() => {
   const fetchApps = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:8080/manage/apps`, {
+      const response = await axios.get(`${basUrl}manage/apps`, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -178,7 +182,7 @@ const fetchSecurityConfig = async () => {
   const token = storedUser?.token;
 
   try {
-    const response = await fetch("http://localhost:8080/admin/security/config", {
+    const response = await fetch(`${BASE_URL}/admin/security/config` ,{
       headers: {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
@@ -212,7 +216,9 @@ const fetchSecurityConfig = async () => {
   //   });
   // };
 
-
+const BASE_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:8080'
+  : window.location.origin;
 const blockIP = async () => {
   if (!ipToBlock) return;
 
@@ -225,7 +231,7 @@ const blockIP = async () => {
       return;
     }
 
-    const response = await fetch('http://localhost:8080/admin/security/block-ip', {
+    const response = await fetch(`${BASE_URL}/admin/security/block-ip`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -261,7 +267,7 @@ const blockIP = async () => {
     const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
     const token = storedUser?.token;
 
-    const response = await fetch('http://localhost:8080/admin/security/unblock-ip', {
+    const response = await fetch(`${BASE_URL}/admin/security/unblock-ip`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -295,7 +301,7 @@ const fetchBlockedIPs = async () => {
     const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
     const token = storedUser?.token;
 
-    const response = await fetch('http://localhost:8080/admin/blocked-ips', {
+    const response = await fetch(`${BASE_URL}/admin/blocked-ips`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -325,7 +331,7 @@ const handleReload = async () => {
 
   setLoading(true);
   try {
-    const response = await fetch('http://localhost:8080/admin/reload', {
+    const response = await fetch(`${BASE_URL}/admin/reload`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -354,7 +360,7 @@ const handleReload = async () => {
   const token = storedUser?.token;
 
   try {
-    const response = await fetch("http://localhost:8080/admin/security/config", {
+    const response = await fetch(`${BASE_URL}/admin/security/config`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -393,7 +399,7 @@ const fetchStats = async () => {
   }
 
   try {
-    const response = await fetch("http://localhost:8080/admin/stats", {
+    const response = await fetch(`${BASE_URL}/admin/stats`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -433,7 +439,7 @@ const fetchNotifications = async () => {
   const token = storedUser?.token;
 
   try {
-    const res = await fetch('http://localhost:8080/api/notifications', {
+    const res = await fetch(`${BASE_URL}/api/notifications`, {
       method: 'GET',
       headers: {
         "Authorization": `Bearer ${token}`
@@ -466,7 +472,7 @@ const fetchUnreadCount = async () => {
   const storedUser = JSON.parse(localStorage.getItem("pyserve_user"));
   const token = storedUser?.token;
   try {
-    const res = await fetch('http://localhost:8080/api/notifications/unread', {
+    const res = await fetch(`${BASE_URL}/api/notifications/unread`, {
       method: 'GET',
       headers: {
         "Authorization": `Bearer ${token}`
@@ -485,7 +491,7 @@ const markNotificationsRead = async () => {
   const token = storedUser?.token;
 
   try {
-    await fetch('http://127.0.0.1:8080/api/notifications/mark-read', {
+    await fetch(`${BASE_URL}/api/notifications/mark-read`, {
       method: 'POST',
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -503,7 +509,7 @@ const markNotificationsRead = async () => {
 
  const deleteApp = async (appId) => {
     try {
-      await axios.delete(`http://localhost:8080/admin/apps/${appId}`, {
+      await axios.delete(`${BASE_URL}/admin/apps/${appId}`, {
         headers: {
           "Content-Type": "application/json",
         },
